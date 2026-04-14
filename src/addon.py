@@ -1,9 +1,14 @@
 import base64
 import binascii
 import json
+import logging
 import os
 import xml.etree.ElementTree as ET
 from urllib.parse import quote, unquote
+
+logging.basicConfig(level=logging.DEBUG, format="%(name)s %(levelname)s %(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -163,4 +168,4 @@ async def resolve_stream(config_b64: str, slug: str, encoded_magnet: str):
         f"https://api.torbox.app/v1/api/torrents/requestdl"
         f"?token={torbox_api_key}&torrent_id={torrent_id}&file_id={file_id}&redirect=true"
     )
-    return RedirectResponse(url=dl_url, status_code=302)
+    return RedirectResponse(url=dl_url, status_code=301)
