@@ -1,5 +1,6 @@
 import logging
 import time
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 
@@ -67,7 +68,28 @@ class TorboxCacheService:
 
         return cached
 
-    async def add_magnet(self, magnet: str) -> int:
+    @staticmethod
+    def _hash_from_magnet(magnet: str) -> str | None:
+        params = parse_qs(urlparse(magnet).query)
+        for xt in params.get("xt", []):
+            if xt.startswith("urn:btih:"):
+                return xt.removeprefix("urn:btih:").lower()
+        return None
+
+    async def resolve(self, magnet: str) -> tuple[int, int]:
+        info_hash = self._hash_from_magnet(magnet)
+
+        if info_hash:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                t = time.monotonic()
+                resp = await client.get(self._url("/api/torrents/mylist"), headers=self._headers())
+                resp.raise_for_status()
+            _log.debug("%s %s %s (%.0fms)", resp.request.method, resp.request.url, resp.status_code, (time.monotonic() - t) * 1000)
+
+            for torrent in resp.json().get("data") or []:
+                if (torrent.get("hash") or "").lower() == info_hash:
+                    return int(torrent["id"]), self._best_file_id(torrent, magnet)
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             t = time.monotonic()
             resp = await client.post(
@@ -76,15 +98,14 @@ class TorboxCacheService:
                 headers=self._headers(),
             )
             resp.raise_for_status()
-
         _log.debug("%s %s %s (%.0fms)", resp.request.method, resp.request.url, resp.status_code, (time.monotonic() - t) * 1000)
+
         body = resp.json()
         torrent_id = (body.get("data") or {}).get("torrent_id")
         if torrent_id is None:
             raise ValueError(f"No torrent_id in response: {body}")
-        return int(torrent_id)
+        torrent_id = int(torrent_id)
 
-    async def get_video_file_id(self, torrent_id: int) -> int:
         async with httpx.AsyncClient(timeout=30.0) as client:
             t = time.monotonic()
             resp = await client.get(
@@ -93,17 +114,18 @@ class TorboxCacheService:
                 headers=self._headers(),
             )
             resp.raise_for_status()
-
         _log.debug("%s %s %s (%.0fms)", resp.request.method, resp.request.url, resp.status_code, (time.monotonic() - t) * 1000)
-        body = resp.json()
-        torrent = body.get("data")
+
+        torrent = resp.json().get("data")
         if not torrent:
             raise ValueError(f"Torrent {torrent_id} not found")
+        return torrent_id, self._best_file_id(torrent, magnet)
 
+    @staticmethod
+    def _best_file_id(torrent: dict, magnet: str) -> int:
         files = torrent.get("files") or []
         if not files:
-            raise ValueError(f"No files found for torrent {torrent_id}")
-
+            raise ValueError(f"No files found for torrent {torrent.get('id')} ({magnet})")
         video_files = [
             f for f in files
             if (f.get("name") or "").lower().endswith(tuple(_VIDEO_EXTENSIONS))
@@ -112,7 +134,7 @@ class TorboxCacheService:
         best = max(candidates, key=lambda f: f.get("size") or 0)
         fid = best.get("id")
         if fid is None:
-            raise ValueError(f"No file id found for torrent {torrent_id}")
+            raise ValueError(f"No file id in torrent {torrent.get('id')}")
         return int(fid)
 
 

@@ -157,8 +157,7 @@ async def resolve_stream(config_b64: str, slug: str, encoded_magnet: str):
 
     torbox = TorboxCacheService(torbox_api_key)
     try:
-        torrent_id = await torbox.add_magnet(magnet)
-        file_id = await torbox.get_video_file_id(torrent_id)
+        torrent_id, file_id = await torbox.resolve(magnet)
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail="TorBox error") from exc
     except ValueError as exc:
