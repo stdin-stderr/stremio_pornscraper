@@ -90,7 +90,10 @@ class BitmagnetTorznabClient:
     @staticmethod
     def _slug_to_query(slug: str) -> str:
         slug = re.sub(r"-s\d+e\d+-?", "-", slug, flags=re.IGNORECASE)
-        return slug.replace("-", " ").strip()
+        # Remove the site name prefix (first hyphen-separated word)
+        _, _, slug = slug.partition("-")
+        query = slug.replace("-", " ").strip()
+        return f'"{query}"'
 
     @staticmethod
     def _normalize_info_hash(raw_hash: str) -> str:
