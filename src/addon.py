@@ -3,6 +3,7 @@ import binascii
 import json
 import os
 import xml.etree.ElementTree as ET
+from urllib.parse import quote, unquote
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -11,14 +12,14 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from src.bitmagnet import BitmagnetTorznabClient
-from src.torbox import RequestError, TorboxCacheService
+from src.torbox import TorboxCacheService
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET"],
+    allow_methods=["GET", "HEAD"],
     allow_headers=["*"],
 )
 
@@ -112,7 +113,7 @@ async def manifest(config_b64: str):
 
 
 @app.get("/{config_b64}/stream/movie/{meta_id}.json")
-async def stream(config_b64: str, meta_id: str):
+async def stream(request: Request, config_b64: str, meta_id: str):
     torbox_api_key = _require_torbox_api_key(config_b64)
 
     if not meta_id.startswith("tpdb_"):
@@ -129,7 +130,37 @@ async def stream(config_b64: str, meta_id: str):
         raise HTTPException(status_code=502, detail="Failed to query Torznab") from exc
     except ET.ParseError as exc:
         raise HTTPException(status_code=502, detail="Invalid Torznab response") from exc
-    except RequestError as exc:
+    except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail="Failed to query TorBox cache") from exc
 
+    base = str(request.base_url).rstrip("/")
+    for s in streams:
+        magnet = s.pop("_magnet", None)
+        if magnet:
+            encoded = quote(magnet, safe="")
+            s["url"] = f"{base}/{config_b64}/stream/tpdb_{slug}/{encoded}"
+        s.pop("infoHash", None)
+        s.pop("sources", None)
+
     return JSONResponse({"streams": streams})
+
+
+@app.api_route("/{config_b64}/stream/tpdb_{slug}/{encoded_magnet:path}", methods=["GET", "HEAD"])
+async def resolve_stream(config_b64: str, slug: str, encoded_magnet: str):
+    torbox_api_key = _require_torbox_api_key(config_b64)
+    magnet = unquote(encoded_magnet)
+
+    torbox = TorboxCacheService(torbox_api_key)
+    try:
+        torrent_id = await torbox.add_magnet(magnet)
+        file_id = await torbox.get_video_file_id(torrent_id)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="TorBox error") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    dl_url = (
+        f"https://api.torbox.app/v1/api/torrents/requestdl"
+        f"?token={torbox_api_key}&torrent_id={torrent_id}&file_id={file_id}&redirect=true"
+    )
+    return RedirectResponse(url=dl_url, status_code=302)

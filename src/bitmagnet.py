@@ -145,6 +145,7 @@ class BitmagnetTorznabClient:
             "infoHash": info_hash,
             "sources": trackers,
             "resolution": resolution,
+            "_magnet": magnet_url,
         }
         if size_bytes is not None:
             stream["behaviorHints"] = {"videoSize": size_bytes}
