@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TPDB TorBox Streams - Stremio Addon Configuration</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f0f13;
+      color: #e0e0e0;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 0.25rem;
+    }
+
+    .subtitle {
+      color: #888;
+      margin-bottom: 2rem;
+      font-size: 0.95rem;
+    }
+
+    .card {
+      background: #1a1a23;
+      border: 1px solid #2a2a38;
+      border-radius: 10px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 1rem;
+    }
+
+    .field-label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #d9d9e3;
+      margin-bottom: 0.6rem;
+    }
+
+    .helper {
+      color: #888;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      margin-bottom: 1rem;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      background: #0f0f13;
+      border: 1px solid #2a2a38;
+      border-radius: 6px;
+      color: #e0e0e0;
+      padding: 0.75rem 0.85rem;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input[type="text"]:focus { border-color: #6c63ff; }
+
+    button {
+      background: #6c63ff;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 0.55rem 1.1rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s;
+    }
+
+    button:hover { background: #7d75ff; }
+
+    .status {
+      font-size: 0.85rem;
+      color: #888;
+      margin-top: 0.75rem;
+      min-height: 1.2rem;
+    }
+
+    .url-row {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    .url-row input[type="text"] {
+      font-family: monospace;
+      font-size: 0.82rem;
+      color: #a0e0a0;
+    }
+
+    @media (max-width: 640px) {
+      .url-row {
+        flex-direction: column;
+      }
+
+      button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>TPDB TorBox Streams</h1>
+    <p class="subtitle">Enter your TorBox API key and install the generated stream-only addon URL in Stremio.</p>
+
+    <div class="card">
+      <h2>1. TorBox Configuration</h2>
+      <label class="field-label" for="torboxApiKey">TorBox API key</label>
+      <p class="helper">The key is encoded into the install URL so the addon can serve streams for <code>tpdb_*</code> movie IDs.</p>
+      <input
+        type="text"
+        id="torboxApiKey"
+        placeholder="Paste your TorBox API key"
+        value="{{ torbox_api_key }}"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <div class="status" id="statusMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>2. Install URL</h2>
+      <p class="helper">Copy this manifest URL into Stremio once your TorBox API key is filled in.</p>
+      <div class="url-row">
+        <input type="text" id="installUrl" readonly />
+        <button id="copyBtn">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const torboxApiKeyInput = document.getElementById('torboxApiKey');
+    const installUrl = document.getElementById('installUrl');
+    const copyBtn = document.getElementById('copyBtn');
+    const statusMsg = document.getElementById('statusMsg');
+
+    function encodeConfig(config) {
+      return btoa(JSON.stringify(config))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/g, '');
+    }
+
+    function updateInstallUrl() {
+      const torboxApiKey = torboxApiKeyInput.value.trim();
+      const base = `${location.protocol}//${location.host}`;
+
+      if (!torboxApiKey) {
+        installUrl.value = '';
+        statusMsg.textContent = 'Enter a TorBox API key to generate an install URL.';
+        copyBtn.disabled = true;
+        return;
+      }
+
+      const encoded = encodeConfig({ torboxApiKey });
+      installUrl.value = `${base}/${encoded}/manifest.json`;
+      statusMsg.textContent = 'Install URL ready.';
+      copyBtn.disabled = false;
+    }
+
+    torboxApiKeyInput.addEventListener('input', updateInstallUrl);
+
+    copyBtn.addEventListener('click', async () => {
+      if (!installUrl.value) {
+        return;
+      }
+
+      await navigator.clipboard.writeText(installUrl.value);
+      copyBtn.textContent = 'Copied!';
+      setTimeout(() => {
+        copyBtn.textContent = 'Copy';
+      }, 1500);
+    });
+
+    updateInstallUrl();
+  </script>
+</body>
+</html>
