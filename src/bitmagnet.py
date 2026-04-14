@@ -1,9 +1,14 @@
 import base64
 import binascii
+import logging
+import re
+import time
 from urllib.parse import parse_qs, urlparse
 import xml.etree.ElementTree as ET
 
 import httpx
+
+_log = logging.getLogger(__name__)
 
 
 class BitmagnetTorznabClient:
@@ -15,12 +20,14 @@ class BitmagnetTorznabClient:
         query = self._slug_to_query(slug)
 
         async with httpx.AsyncClient(timeout=30.0) as client:
+            t = time.monotonic()
             response = await client.get(
                 self._torznab_url,
                 params={"t": "search", "q": query},
             )
             response.raise_for_status()
 
+        _log.debug("%s %s %s (%.0fms)", response.request.method, response.request.url, response.status_code, (time.monotonic() - t) * 1000)
         streams = self._parse_streams(response.text, query)
         if not streams or self._torbox_cache_service is None:
             return streams
@@ -82,6 +89,7 @@ class BitmagnetTorznabClient:
 
     @staticmethod
     def _slug_to_query(slug: str) -> str:
+        slug = re.sub(r"-s\d+e\d+-?", "-", slug, flags=re.IGNORECASE)
         return slug.replace("-", " ").strip()
 
     @staticmethod

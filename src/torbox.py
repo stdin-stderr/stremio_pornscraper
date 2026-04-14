@@ -1,7 +1,12 @@
+import logging
+import time
+
 import httpx
 
 _BASE = "https://api.torbox.app"
 _VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".m4v"}
+_log = logging.getLogger(__name__)
+
 
 
 class TorboxCacheService:
@@ -24,6 +29,7 @@ class TorboxCacheService:
             return set()
 
         async with httpx.AsyncClient(timeout=30.0) as client:
+            t = time.monotonic()
             resp = await client.get(
                 self._url("/api/torrents/checkcached"),
                 params={"hash": ",".join(normalized), "format": "object"},
@@ -31,6 +37,7 @@ class TorboxCacheService:
             )
             resp.raise_for_status()
 
+        _log.debug("%s %s %s (%.0fms)", resp.request.method, resp.request.url, resp.status_code, (time.monotonic() - t) * 1000)
         data = resp.json().get("data")
         return self._extract_cached_hashes(data, normalized)
 
@@ -62,6 +69,7 @@ class TorboxCacheService:
 
     async def add_magnet(self, magnet: str) -> int:
         async with httpx.AsyncClient(timeout=30.0) as client:
+            t = time.monotonic()
             resp = await client.post(
                 self._url("/api/torrents/createtorrent"),
                 data={"magnet": magnet},
@@ -69,6 +77,7 @@ class TorboxCacheService:
             )
             resp.raise_for_status()
 
+        _log.debug("%s %s %s (%.0fms)", resp.request.method, resp.request.url, resp.status_code, (time.monotonic() - t) * 1000)
         body = resp.json()
         torrent_id = (body.get("data") or {}).get("torrent_id")
         if torrent_id is None:
@@ -77,6 +86,7 @@ class TorboxCacheService:
 
     async def get_video_file_id(self, torrent_id: int) -> int:
         async with httpx.AsyncClient(timeout=30.0) as client:
+            t = time.monotonic()
             resp = await client.get(
                 self._url("/api/torrents/mylist"),
                 params={"id": torrent_id, "bypass_cache": "true"},
@@ -84,6 +94,7 @@ class TorboxCacheService:
             )
             resp.raise_for_status()
 
+        _log.debug("%s %s %s (%.0fms)", resp.request.method, resp.request.url, resp.status_code, (time.monotonic() - t) * 1000)
         body = resp.json()
         torrent = body.get("data")
         if not torrent:
